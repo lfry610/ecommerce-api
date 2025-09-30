@@ -4,21 +4,21 @@ import (
 	"ecommerce/internal/db"
 	"ecommerce/internal/env"
 	"ecommerce/internal/store"
-	"log"
-	"log/slog"
-	"os"
+
+	"go.uber.org/zap"
 )
 
 type application struct {
-	logger *slog.Logger
+	logger *zap.SugaredLogger
 	config config
 	store  store.Storage
 }
 
 type config struct {
-	addr string
-	db   dbConfig
-	env  string
+	addr   string
+	db     dbConfig
+	env    string
+	apiURL string
 }
 type dbConfig struct {
 	addr         string
@@ -27,9 +27,28 @@ type dbConfig struct {
 	maxIdleTime  string
 }
 
+//	@title			Ecommerce API
+//	@description	API for an ECommerce shop
+//	@termsOfService	http://swagger.io/terms/
+
+//	@contact.name	API Support
+//	@contact.url	http://www.swagger.io/support
+//	@contact.email	support@swagger.io
+
+//	@license.name	Apache 2.0
+//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
+
+//	@BasePath					/v1
+//
+//	@securityDefinitions.apikey	ApiKeyAuth
+//	@in							header
+//	@name						Authorization
+//	@description
+
 func main() {
 	cfg := config{
-		addr: env.GetString("addr", ":4000"),
+		addr:   env.GetString("addr", ":4000"),
+		apiURL: env.GetString("EXTERNAL_URL", "localhost:4000"),
 		db: dbConfig{
 			addr:         env.GetString("DB_ADDR", "postgres://admin:adminpassword@localhost/admin_db?sslmode=disable"),
 			maxOpenConns: env.GetInt("DB_MAX_OPEN_CONNS", 30),
@@ -39,6 +58,9 @@ func main() {
 		env: env.GetString("ENV", "development"),
 	}
 
+	logger := zap.Must(zap.NewProduction()).Sugar()
+	defer logger.Sync()
+
 	db, err := db.New(
 		cfg.db.addr,
 		cfg.db.maxOpenConns,
@@ -47,13 +69,12 @@ func main() {
 	)
 
 	if err != nil {
-		log.Panic(err)
+		logger.Fatal(err)
 	}
 
 	defer db.Close()
-	log.Println("database connected")
+	logger.Info("database has connected")
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	store := store.NewPostgresStorage(db)
 	app := &application{
 		logger: logger,
@@ -61,10 +82,8 @@ func main() {
 		store:  store,
 	}
 
-	logger.Info("Serving on port", slog.Any("addr", ":4000"))
+	logger.Infow("server has started", "addr", app.config.addr, "env", app.config.env)
 	mux := app.route()
 
-	log.Fatal(app.run(mux))
-	logger.Error(err.Error())
-	os.Exit(1)
+	logger.Fatal(app.run(mux))
 }

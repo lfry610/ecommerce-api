@@ -9,6 +9,8 @@ import (
 	"strconv"
 )
 
+const version = "1.0.0"
+
 type AddUserPayload struct {
 	Email        string `json:"email" validate:"required"`
 	PasswordHash string `json:"password_hash" validate:"required"`
